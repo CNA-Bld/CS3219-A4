@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title></title>
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
+          integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <script src="//d3js.org/d3.v3.min.js"></script>
+
+
+    <style>
+        rect.bordered {
+            stroke: #E6E6E6;
+            stroke-width: 2px;
+        }
+
+        text.mono {
+            font-size: 9pt;
+            font-family: Consolas, courier;
+            fill: #aaa;
+        }
+
+        text.axis-workweek {
+            fill: #000;
+        }
+
+        text.axis-worktime {
+            fill: #000;
+        }
+
+        .bar.total rect {
+            fill: #17becf;
+        }
+
+        .bar.positive rect {
+            fill: #98df8a;
+        }
+
+        .bar.negative rect {
+            fill: #ff9896;
+        }
+
+        .bar line.connector {
+            stroke: grey;
+            stroke-dasharray: 3;
+        }
+
+        .bar text {
+            fill: black;
+            font: 12px sans-serif;
+            text-anchor: middle;
+        }
+
+        .axis text {
+            font: 10px sans-serif;
+        }
+
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: #000;
+            shape-rendering: crispEdges;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Demo</h1>
+
+    <form class="form-inline">
+        <div class="form-group">
+            <label for="repoName">Repo</label>
+            <input type="text" class="form-control" id="repoName" value="tungnk1993/scrapy">
+        </div>
+        <button type="button" class="btn btn-default" onclick="updateVisualization()">Update</button>
+    </form>
+
+    <div id="heat-map-chart">
+        <svg></svg>
+    </div>
+    <div id="waterfall-chart">
+        <svg></svg>
+    </div>
+</div>
+
+<script>
+    function genHeatMap(repo) {
+        var margin = {top: 50, right: 0, bottom: 100, left: 30},
+                width = 960 - margin.left - margin.right,
+                height = 430 - margin.top - margin.bottom,
+                gridSize = Math.floor(width / 24),
+                legendElementWidth = gridSize * 2,
+                buckets = 9,
+                colors = ["#ffffd9", "#edf8b1", "#c7e9b4", "#7fcdbb", "#41b6c4", "#1d91c0", "#225ea8", "#253494", "#081d58"],
+                days = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"],
+                times = ["0a", "1a", "2a", "3a", "4a", "5a", "6a", "7a", "8a", "9a", "10a", "11a", "12p", "1p", "2p", "3p", "4p", "5p", "6p", "7p", "8p", "9p", "10p", "11p"];
+
+        var svg = d3.select("#heat-map-chart>svg").html("")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+        var dayLabels = svg.selectAll(".dayLabel")
+                .data(days)
+                .enter().append("text")
+                .text(function (d) {
+                    return d;
+                })
+                .attr("x", 0)
+                .attr("y", function (d, i) {
+                    return i * gridSize;
+                })
+                .style("text-anchor", "end")
+                .attr("transform", "translate(-6," + gridSize / 1.5 + ")")
+                .attr("class", function (d, i) {
+                    return ((i >= 0 && i <= 4) ? "dayLabel mono axis axis-workweek" : "dayLabel mono axis");
+                });
+
+        var timeLabels = svg.selectAll(".timeLabel")
+                .data(times)
+                .enter().append("text")
+                .text(function (d) {
+                    return d;
+                })
+                .attr("x", function (d, i) {
+                    return i * gridSize;
+                })
+                .attr("y", 0)
+                .style("text-anchor", "middle")
+                .attr("transform", "translate(" + gridSize / 2 + ", -6)")
+                .attr("class", function (d, i) {
+                    return ((i >= 7 && i <= 16) ? "timeLabel mono axis axis-worktime" : "timeLabel mono axis");
+                });
+
+        var heatmapChart = function (jsonFile) {
+            d3.json(jsonFile,
+                    function (error, jsonData) {
+
+                        var data = jsonData.map(function (item) {
+                            return {"day": item[0], "hour": item[1], "value": item[2]};
+                        });
+
+
+                        var colorScale = d3.scale.quantile()
+                                .domain([0, buckets - 1, d3.max(data, function (d) {
+                                    return d.value;
+                                })])
+                                .range(colors);
+
+                        var cards = svg.selectAll(".hour")
+                                .data(data, function (d) {
+                                    return d.day + ':' + d.hour;
+                                });
+
+                        cards.append("title");
+
+                        cards.enter().append("rect")
+                                .attr("x", function (d) {
+                                    return (d.hour ) * gridSize;
+                                })
+                                .attr("y", function (d) {
+                                    return (d.day ) * gridSize;
+                                })
+                                .attr("rx", 4)
+                                .attr("ry", 4)
+                                .attr("class", "hour bordered")
+                                .attr("width", gridSize)
+                                .attr("height", gridSize)
+                                .style("fill", colors[0]);
+
+                        cards.transition().duration(1000)
+                                .style("fill", function (d) {
+                                    return colorScale(d.value);
+                                });
+
+                        cards.select("title").text(function (d) {
+                            return d.value;
+                        });
+
+                        cards.exit().remove();
+
+                        var legend = svg.selectAll(".legend")
+                                .data([0].concat(colorScale.quantiles()), function (d) {
+                                    return d;
+                                });
+
+                        legend.enter().append("g")
+                                .attr("class", "legend");
+
+                        legend.append("rect")
+                                .attr("x", function (d, i) {
+                                    return legendElementWidth * i;
+                                })
+                                .attr("y", height)
+                                .attr("width", legendElementWidth)
+                                .attr("height", gridSize / 2)
+                                .style("fill", function (d, i) {
+                                    return colors[i];
+                                });
+
+                        legend.append("text")
+                                .attr("class", "mono")
+                                .text(function (d) {
+                                    return "≥ " + Math.round(d);
+                                })
+                                .attr("x", function (d, i) {
+                                    return legendElementWidth * i;
+                                })
+                                .attr("y", height + gridSize);
+
+                        legend.exit().remove();
+                    });
+        };
+
+        heatmapChart("https://api.github.com/repos/" + repo + "/stats/punch_card");
+    }
+
+    function genWaterFall(repo) {
+        var margin = {top: 20, right: 30, bottom: 30, left: 40},
+                width = 960 - margin.left - margin.right,
+                height = 500 - margin.top - margin.bottom,
+                padding = 0.3;
+
+        var x = d3.scale.ordinal()
+                .rangeRoundBands([0, width], padding);
+
+        var y = d3.scale.linear()
+                .range([height, 0]);
+
+        var xAxis = d3.svg.axis()
+                .scale(x)
+                .orient("bottom");
+
+        var yAxis = d3.svg.axis()
+                .scale(y)
+                .orient("left");
+
+        var chart = d3.select("#waterfall-chart>svg").html("")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+        var waterfallChart = function (jsonFile) {
+            d3.json(jsonFile, function (error, jsonData) {
+                var data = [];
+
+                var cumulative = 0;
+                for (var i = 0; i < jsonData.length;) {
+                    var item = {};
+
+                    item.start = cumulative;
+
+                    var delta = 0;
+                    var currentYear = new Date(jsonData[i][0] * 1000).getFullYear();
+                    while (i < jsonData.length && new Date(jsonData[i][0] * 1000).getFullYear() == currentYear) {
+                        delta += jsonData[i][1] + jsonData[i][2];
+                        i += 1;
+                    }
+
+                    item.value = delta;
+                    cumulative += delta;
+                    item.end = cumulative;
+
+                    item.class = ( item.value >= 0 ) ? 'positive' : 'negative';
+                    item.name = currentYear;
+
+                    data.push(item);
+                }
+
+                data.push({
+                    name: 'Total',
+                    end: cumulative,
+                    start: 0,
+                    class: 'total'
+                });
+
+                x.domain(data.map(function (d) {
+                    return d.name;
+                }));
+                y.domain([0, d3.max(data, function (d) {
+                    return d.end;
+                })]);
+
+                chart.append("g")
+                        .attr("class", "x axis")
+                        .attr("transform", "translate(0," + height + ")")
+                        .call(xAxis);
+
+                chart.append("g")
+                        .attr("class", "y axis")
+                        .call(yAxis);
+
+                var bar = chart.selectAll(".bar")
+                        .data(data)
+                        .enter().append("g")
+                        .attr("class", function (d) {
+                            return "bar " + d.class
+                        })
+                        .attr("transform", function (d) {
+                            return "translate(" + x(d.name) + ",0)";
+                        });
+
+                bar.append("rect")
+                        .attr("y", function (d) {
+                            return y(Math.max(d.start, d.end));
+                        })
+                        .attr("height", function (d) {
+                            return Math.abs(y(d.start) - y(d.end));
+                        })
+                        .attr("width", x.rangeBand());
+
+                bar.append("text")
+                        .attr("x", x.rangeBand() / 2)
+                        .attr("y", function (d) {
+                            return y(d.end) + 5;
+                        })
+                        .attr("dy", function (d) {
+                            return ((d.class == 'negative') ? '-' : '') + ".75em"
+                        })
+                        .text(function (d) {
+                            return (d.end - d.start);
+                        });
+
+                bar.filter(function (d) {
+                    return d.class != "total"
+                }).append("line")
+                        .attr("class", "connector")
+                        .attr("x1", x.rangeBand() + 5)
+                        .attr("y1", function (d) {
+                            return y(d.end)
+                        })
+                        .attr("x2", x.rangeBand() / ( 1 - padding) - 5)
+                        .attr("y2", function (d) {
+                            return y(d.end)
+                        })
+            });
+        };
+
+        waterfallChart("https://api.github.com/repos/" + repo + "/stats/code_frequency");
+    }
+
+    function updateVisualization() {
+        var repo = document.getElementById('repoName').value;
+        genHeatMap(repo);
+        genWaterFall(repo);
+    }
+
+    updateVisualization();
+</script>
+
+</body>
+</html>
